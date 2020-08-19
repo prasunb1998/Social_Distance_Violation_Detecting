@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Aug 18 16:59:08 2020
+Created on Wed Aug 19 03:45:25 2020
 
 @author: Prasun
 """
@@ -12,6 +12,8 @@ import numpy as np
 import imutils
 import cv2
 import os
+from flask import Flask,render_template,Response
+app = Flask( __name__ )
 
 labelsPath =os.path.sep.join([config.MODEL_PATH,"coco.names"])
 LABELS =open(labelsPath).read().strip().split("\n")
@@ -32,10 +34,14 @@ print("[INFO] accesing video stream")
 vs =cv2.VideoCapture(r"pedestrian.mp4"if "pedestrian.mp4"else 0)
 writer =None
 
-while True:
-    (grabbed,frame) =vs.read()
-    if not grabbed:
-        break
+@app.route('/')
+def index():
+    return render_template('index.html')
+def gen():
+    while True:
+        (grabbed,frame) = vs.read()
+        if not grabbed:
+            break
     frame = imutils.resize(frame,width =700)
     results =detect_people(frame,net,ln,personIdx=LABELS.index("person"))
     violate =set()
@@ -53,25 +59,22 @@ while True:
         (cX,cY)= centroid
         color =(0,255,0)
         
-        if i in violate:
+    if i in violate:
             color = (0,0,255)
-        cv2.rectangle(frame,(startX,startY),(endX,endY),color,2)
-        cv2.circle(frame,(cX,cY),5,color,1)
+            cv2.rectangle(frame,(startX,startY),(endX,endY),color,2)
+            cv2.circle(frame,(cX,cY),5,color,1)
     text ="Social Distancing Violations: {}".format(len(violate))
     cv2.putText(frame,text,(10,frame.shape[0]-25),
         cv2.FONT_HERSHEY_SIMPLEX,0.85,(0,0,255),3)
-    cv2.imshow("Frame",frame)
-    key =cv2.waitKey(1) & 0xFF
-    if key ==ord("s"):
-            break
-    if r"social-distance-detector" != "" and writer is None:
-            fourcc =cv2.VideoWriter_fourcc(*"MJPG")
-            writer = cv2.VideoWriter(r'output.mp4',fourcc,25,
-            (frame.shape[1],frame.shape[0]),True)
-        
-    if writer is not None:
-            writer.write(frame)
-            
-cv2.destroyAllWindows()
-    
-    
+    cv2.imwrite("1.jpg",frame)
+    (flag,encodedImage) =cv2.imencode(".jpg",frame)
+    yield(b' --frame\r\n' b'Content-Type:image/jpeg\r\n\r\n'+bytearray(encodedImage)+b'\r\n')
+
+@app.route('/video_feed')
+def video_feed():
+	return Response(gen(),
+			mimetype='multipart/x-mixed-replace; boundary=frame')
+if __name__== '__main__':
+     app.run(host='0.0.0.0',debug =True)
+     vs.release()
+     cv2.destroyAllWindows()
